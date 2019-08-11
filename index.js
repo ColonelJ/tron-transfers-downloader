@@ -9,6 +9,41 @@ const tronWeb = new TronWeb({
 });
 const tronGrid = new TronGrid(tronWeb);
 
+let asset_cache = {};
+async function lookup_trc10(asset) {
+    if (asset_cache[asset]) {
+        return asset_cache[asset];
+    }
+    if (/^\d+$/.test(asset)) {
+        let asset_reply = await tronGrid.asset.get(asset);
+        if (!asset_reply.success || !asset_reply.data.length) {
+            throw new Error('Failed to obtain information for asset ID ' + asset);
+        }
+        asset_cache[asset] = asset_reply.data[0];
+        return asset_cache[asset];
+    } else {
+        let asset_options = {order_by: 'id,asc'};
+        let asset_reply = await tronGrid.asset.getList(asset, asset_options);
+        while (true) {
+            if (!asset_reply.success || !asset_reply.data.length) {
+                throw new Error('Failed to obtain information for asset name ' + asset);
+            }
+            for (let j = 0; j < asset_reply.data.length; ++j) {
+                if (asset_reply.data[j].name == asset) {
+                    asset_cache[asset] = asset_reply.data[j];
+                    return asset_cache[asset];
+                }
+            }
+            if (asset_reply.meta.fingerprint) {
+                asset_options.fingerprint = asset_reply.meta.fingerprint;
+                asset_reply = await tronGrid.asset.getList(asset, asset_options);
+            } else {
+                throw new Error('Failed to find exact match for asset name ' + asset);
+            }
+        }
+    }
+}
+
 async function main() {
     if (process.argv.length < 3) {
         console.error('Usage: node index.js TRON-ADDRESS [output.csv]');
@@ -108,6 +143,7 @@ async function main() {
                     transfersOut.push({
                         transaction_id: reply[j].transaction,
                         timestamp: reply[j].timestamp,
+                        transaction_type: 'Event',
                         transfer_type: 'TRC20',
                         from_address: tronWeb.address.fromHex('41' + reply[j].result[paramFrom].slice(2)),
                         to_address: tronWeb.address.fromHex('41' + reply[j].result[paramTo].slice(2)),
@@ -133,6 +169,7 @@ async function main() {
                     transfersIn.push({
                         transaction_id: reply[j].transaction,
                         timestamp: reply[j].timestamp,
+                        transaction_type: 'Event',
                         transfer_type: 'TRC20',
                         from_address: tronWeb.address.fromHex('41' + reply[j].result[paramFrom].slice(2)),
                         to_address: tronWeb.address.fromHex('41' + reply[j].result[paramTo].slice(2)),
@@ -158,8 +195,6 @@ async function main() {
         }
         console.log('Downloading all transactions for address ' + address + '...');
         let transactions = [];
-        let asset_id_cache = {};
-        let asset_name_cache = {};
         options = {limit: 200};
         reply = await tronGrid.account.getTransactions(address, options);
         while (true) {
@@ -167,10 +202,45 @@ async function main() {
                 throw new Error('Received unsuccessful response from TronGrid API');
             }
             for (let i = 0; i < reply.data.length; ++i) {
-                if (reply.data[i].raw_data.contract[0].type == 'TransferContract') {
+                if (reply.data[i].internal_tx_id) {
+                    if (!reply.data[i].data.rejected) {
+                        if (Object.keys(reply.data[i].data.call_value).length != 1) {
+                            throw new Error('Unhandled number of assets in call value ' + Object.keys(reply.data[i].data.call_value).length + ' for internal transaction');
+                        }
+                        if (Object.keys(reply.data[i].data.call_value)[0] == '_') {
+                            transactions.push({
+                                transaction_id: reply.data[i].tx_id,
+                                timestamp: reply.data[i].block_timestamp,
+                                transaction_type: 'Internal',
+                                transfer_type: 'TRX',
+                                from_address: tronWeb.address.fromHex(reply.data[i].from_address),
+                                to_address: tronWeb.address.fromHex(reply.data[i].to_address),
+                                amount: reply.data[i].data.call_value['_'] / 10**6,
+                                token_abbr: 'TRX',
+                                token_name: 'Tronix',
+                                token_id: ''
+                            });
+                        } else {
+                            let asset_details = await lookup_trc10(Object.keys(reply.data[i].data.call_value)[0]);
+                            transactions.push({
+                                transaction_id: reply.data[i].tx_id,
+                                timestamp: reply.data[i].block_timestamp,
+                                transaction_type: 'Internal',
+                                transfer_type: 'TRC10',
+                                from_address: tronWeb.address.fromHex(reply.data[i].from_address),
+                                to_address: tronWeb.address.fromHex(reply.data[i].to_address),
+                                amount: Object.values(reply.data[i].data.call_value)[0] / 10**(asset_details.precision || 0),
+                                token_abbr: asset_details.abbr,
+                                token_name: asset_details.name,
+                                token_id: asset_details.id
+                            });
+                        }
+                    }
+                } else if (reply.data[i].raw_data.contract[0].type == 'TransferContract') {
                     transactions.push({
                         transaction_id: reply.data[i].txID,
-                        timestamp: reply.data[i].raw_data.timestamp,
+                        timestamp: reply.data[i].block_timestamp,
+                        transaction_type: 'Transaction',
                         transfer_type: 'TRX',
                         from_address: tronWeb.address.fromHex(reply.data[i].raw_data.contract[0].parameter.value.owner_address),
                         to_address: tronWeb.address.fromHex(reply.data[i].raw_data.contract[0].parameter.value.to_address),
@@ -180,48 +250,11 @@ async function main() {
                         token_id: ''
                     });
                 } else if (reply.data[i].raw_data.contract[0].type == 'TransferAssetContract') {
-                    let asset_details;
-                    if (/^\d+$/.test(reply.data[i].raw_data.contract[0].parameter.value.asset_name)) {
-                        if (!asset_id_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name]) {
-                            let asset_reply = await tronGrid.asset.get(reply.data[i].raw_data.contract[0].parameter.value.asset_name);
-                            if (!asset_reply.success || !asset_reply.data.length) {
-                                throw new Error('Failed to obtain information for asset ID ' + reply.data[i].raw_data.contract[0].parameter.value.asset_name);
-                            }
-                            asset_id_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name] = asset_reply.data[0];
-                        }
-                        asset_details = asset_id_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name];
-                    } else {
-                        if (!asset_name_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name]) {
-                            let asset_options = {order_by: 'id,asc'};
-                            let asset_reply = await tronGrid.asset.getList(reply.data[i].raw_data.contract[0].parameter.value.asset_name, asset_options);
-                            while (true) {
-                                if (!asset_reply.success) {
-                                    throw new Error('Failed to obtain information for asset name ' + reply.data[i].raw_data.contract[0].parameter.value.asset_name);
-                                }
-                                let found = false;
-                                for (let j = 0; j < asset_reply.data.length; ++j) {
-                                    if (asset_reply.data[j].name == reply.data[i].raw_data.contract[0].parameter.value.asset_name) {
-                                        asset_name_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name] = asset_reply.data[j];
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                                if (found) {
-                                    break;
-                                }
-                                if (asset_reply.meta.fingerprint) {
-                                    asset_options.fingerprint = asset_reply.meta.fingerprint;
-                                    asset_reply = await tronGrid.asset.getList(reply.data[i].raw_data.contract[0].parameter.value.asset_name, asset_options);
-                                } else {
-                                    throw new Error('Failed to find exact match for asset name ' + reply.data[i].raw_data.contract[0].parameter.value.asset_name);
-                                }
-                            }
-                        }
-                        asset_details = asset_name_cache[reply.data[i].raw_data.contract[0].parameter.value.asset_name];
-                    }
+                    let asset_details = await lookup_trc10(reply.data[i].raw_data.contract[0].parameter.value.asset_name);
                     transactions.push({
                         transaction_id: reply.data[i].txID,
-                        timestamp: reply.data[i].raw_data.timestamp,
+                        timestamp: reply.data[i].block_timestamp,
+                        transaction_type: 'Transaction',
                         transfer_type: 'TRC10',
                         from_address: tronWeb.address.fromHex(reply.data[i].raw_data.contract[0].parameter.value.owner_address),
                         to_address: tronWeb.address.fromHex(reply.data[i].raw_data.contract[0].parameter.value.to_address),
@@ -231,6 +264,9 @@ async function main() {
                         token_id: asset_details.id
                     });
                 }
+            }
+            if (reply.data.length) {
+                console.log('Reached timestamp ' + reply.data[reply.data.length - 1].block_timestamp);
             }
             if (reply.meta.fingerprint) {
                 options.fingerprint = reply.meta.fingerprint;
@@ -256,8 +292,9 @@ async function main() {
             if (!record_sets[max_timestamp_index].length) {
                 record_sets.splice(max_timestamp_index, 1);
             }
-            await csvFile.write(stringify([[record.transaction_id, record.timestamp, record.transfer_type, record.from_address, record.to_address, record.amount, record.token_abbr, record.token_name, record.token_id]]));
+            await csvFile.write(stringify([[record.transaction_id, record.timestamp, record.transaction_type, record.transfer_type, record.from_address, record.to_address, record.amount, record.token_abbr, record.token_name, record.token_id]]));
         }
+        console.log('Successfully written all records to ' + outputFile + '!');
     } finally {
         if (csvFile !== undefined) {
             await csvFile.close();
