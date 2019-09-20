@@ -203,7 +203,10 @@ async function main() {
             }
             for (let i = 0; i < reply.data.length; ++i) {
                 if (reply.data[i].internal_tx_id) {
-                    if (!reply.data[i].data.rejected) {
+                    if (!reply.data[i].data.rejected
+                        && reply.data[i].data.call_value
+                        && Object.keys(reply.data[i].data.call_value).length)
+                    {
                         if (Object.keys(reply.data[i].data.call_value).length != 1) {
                             throw new Error('Unhandled number of assets in call value ' + Object.keys(reply.data[i].data.call_value).length + ' for internal transaction');
                         }
