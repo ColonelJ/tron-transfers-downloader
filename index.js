@@ -269,7 +269,7 @@ async function main() {
                 }
             }
             if (reply.data.length) {
-                console.log('Reached timestamp ' + reply.data[reply.data.length - 1].block_timestamp);
+                console.log('Reached timestamp ' + reply.data[reply.data.length - 1].block_timestamp + ' [' + new Date(reply.data[reply.data.length - 1].block_timestamp) + ']');
             }
             if (reply.meta.fingerprint) {
                 options.fingerprint = reply.meta.fingerprint;
@@ -295,7 +295,7 @@ async function main() {
             if (!record_sets[max_timestamp_index].length) {
                 record_sets.splice(max_timestamp_index, 1);
             }
-            await csvFile.write(stringify([[record.transaction_id, record.timestamp, record.transaction_type, record.transfer_type, record.from_address, record.to_address, record.amount, record.token_abbr, record.token_name, record.token_id]]));
+            await csvFile.write(stringify([[record.transaction_id, record.timestamp + ' [' + new Date(record.timestamp) + ']', record.transaction_type, record.transfer_type, record.from_address, record.to_address, record.amount, record.token_abbr, record.token_name, record.token_id]]));
         }
         console.log('Successfully written all records to ' + outputFile + '!');
     } finally {
