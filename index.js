@@ -59,7 +59,12 @@ async function main() {
     let csvFile;
     try {
         csvFile = await fsPromises.open(outputFile, 'w');
-        let options = {
+        let options;
+        let reply;
+        let record_sets = [];
+
+        /***********************************************************************
+        options = {
             uri: 'https://apilist.tronscan.org/api/token_trc20',
             qs: {
                 limit: 20,
@@ -70,7 +75,6 @@ async function main() {
             },
             json: true
         };
-        let reply;
         let trc20_tokens = [];
         console.log('Downloading details of TRC20 tokens from Tronscan...');
         do {
@@ -86,7 +90,6 @@ async function main() {
             options.qs.start += options.qs.limit;
         } while(reply.trc20_tokens.length == options.qs.limit);
         console.log('Found ' + trc20_tokens.length + ' tokens, now processing them...');
-        let record_sets = [];
         for (let i = 0; i < trc20_tokens.length; ++i) {
             reply = await tronWeb.getEventResult(trc20_tokens[i].contract_address, {eventName: 'Transfer', size: 1});
             if (!reply.length) {
@@ -193,6 +196,8 @@ async function main() {
             }
             console.log(trc20_tokens[i].contract_address + ': Found ' + (transfersOut.length + transfersIn.length) + ' events for token ' + trc20_tokens[i].symbol + ' (' + trc20_tokens[i].name + ')');
         }
+        ***********************************************************************/
+
         console.log('Downloading all transactions for address ' + address + '...');
         let transactions = [];
         options = {limit: 200};
