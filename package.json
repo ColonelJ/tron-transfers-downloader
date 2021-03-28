@@ -4,7 +4,8 @@
   "description": "Node.js script to download all TRX, TRC10 and TRC20 transfers for an account using TronGrid and write them to a CSV file",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "koinly": "node koinly.js"
   },
   "repository": "https://github.com/ColonelJ/tron-transfers-downloader.git",
   "author": "Jason Raymond Bell <jason@epixxware.com>",
@@ -12,6 +13,7 @@
   "dependencies": {
     "axios": "^0.21.1",
     "bignumber.js": "^9.0.1",
+    "csv-parse": "^4.15.3",
     "csv-stringify": "^5.6.2",
     "dotenv": "^8.2.0",
     "tronweb": "^3.2.6"

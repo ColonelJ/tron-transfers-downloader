@@ -45,3 +45,23 @@ In a terminal:
 ```bash
 yarn start TRON-ADDRESS [output.csv]
 ```
+
+### Additional features
+
+#### Koinly
+
+There is an additional script that can convert the output of the main script into [Koinly's CSV universal format](https://help.koinly.io/en/articles/3662999-how-to-create-a-custom-csv-file-with-your-data).
+
+To use it change to the directory of the script and run:
+
+```bash
+yarn koinly TRON-ADDRESS input.csv output.csv
+```
+
+Where `input.csv` is the output file from the main script and `output.csv` is the file to be written in Koinly format.
+
+After generating the file, you should manually go through the CSV, looking for any pairs of records (sending and receiving) that form a trade of one token for another.  For these you should cut and paste the received amount and received currency to the sending record, delete the receiving record, and edit the description of the sending record as appropriate.
+
+The currencies written in the CSV include a description (so that you can detect fakes).  You may need to delete the records involving fake/spam tokens, and change the currency fields for the real tokens to a simpler format (using find/replace) so that Koinly can recognize it and assign it a USD value.  E.g. instead of `BTT (BitTorrent; 1002000)`, which can be verified as authentic due to its ID of 1002000, you can just have `BTT` as the currency in the CSV, and any other records containing BTT (with other fake IDs) should be deleted.  In case of token migrations, you may wish to have both the old and new tokens listed as the same currency, and if you missed the swap, add a record to the CSV transferring the balance out of your account with a `Label` of `lost`.
+
+Finally, labels are not added automatically to any transfers, except for withdrawing TRX rewards (which are labelled as `staking`) so you may wish to add labels.  See the [link](https://help.koinly.io/en/articles/3662999-how-to-create-a-custom-csv-file-with-your-data) to see which labels are valid.
