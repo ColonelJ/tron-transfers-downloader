@@ -64,6 +64,17 @@ async function downloadAllTransactions(url) {
     const txs_from_last_page = page_txs.slice(i);
     params.max_timestamp = timestamp;
     response = await queryTronGrid(url, params);
+    // Hack to deal with TronGrid cutting off early
+    if (response.data.length < limit) {
+      console.log('Received end of data, requesting again to confirm');
+      for (let j = 0; j < 4; ++j) {
+        response = await queryTronGrid(url, params);
+        if (response.data.length === limit) {
+          console.log('End of data not confirmed, continuing download!');
+          break;
+        }
+      }
+    }
     page_txs = response.data;
     for (let j = 0; j < txs_from_last_page.length; ++j) {
       const tx_from_last_page = JSON.stringify(txs_from_last_page[j]);
