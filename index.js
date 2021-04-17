@@ -35,12 +35,26 @@ const trongrid = axios.create({
 });
 
 async function queryTronGrid(url, params) {
-  const response = (await trongrid.get(url, { params })).data;
-  if (!response || !response.success || !response.data) {
-    console.error('Failed response from API:', response);
-    throw new Error('Received failed response from API');
+  for (let retries = 0; retries <= 10; ++retries) {
+    if (retries > 0) console.log(`Query TronGrid retry #${retries}`);
+    try {
+      const response = (await trongrid.get(url, { params })).data;
+      if (!response || !response.success || !response.data) {
+        console.error('Failed response from API:', response);
+        throw new Error('Received failed response from API');
+      }
+      for (let i = 0; i < response.data.length; ++i) {
+        if (!response.data[i]) {
+          console.error('Missing object at index', i);
+          throw new Error('Received invalid response from API');
+        }
+      }
+      return response;
+    } catch (e) {
+      console.error('Error querying TronGrid:', e.message);
+    }
   }
-  return response;
+  throw new Error('Multiple attempts to query TronGrid failed!');
 }
 
 async function downloadAllTransactions(url) {

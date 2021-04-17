@@ -1,6 +1,6 @@
 {
   "name": "tron-transfers-downloader",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Node.js script to download all TRX, TRC10 and TRC20 transfers for an account using TronGrid and write them to a CSV file",
   "main": "index.js",
   "scripts": {
